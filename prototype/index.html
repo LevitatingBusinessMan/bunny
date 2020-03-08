@@ -26,12 +26,13 @@
 				location.hash = roomHash;
 			} else {
 				var hosting = false;
-				var roomHash = location.hash;
+				var roomHash = location.hash.substring(1);
 			}
 
 			const roomName = 'observable-' + roomHash;
 			const drone = new ScaleDrone("2rr1mps4zK4JB32N");
-			const videoTag = document.getElementById("video");
+			const video = document.getElementById("video");
+			video.setAttribute('autoplay', true);
 
 			var room;
 			var pc;
@@ -48,27 +49,47 @@
 						console.error(err);
 						return Alert("Error occured")
 					}
-				
-					startWebRTC()
-					
 				})
+
+				room.on("members", members => {
+					//Offer SDP when second member
+					const offering = members.length == 2
+
+					console.log(`Members in room: ${members.length}`)
+
+					//With a working signaling server, start WebRTC
+					startWebRTC(offering)
+				})
+
+				if (hosting)
+					room.on('member_join', member => {
+						console.log("Offering SDP to new member")
+						pc.createOffer()
+						.then(offer => {return pc.setLocalDescription(offer)})
+						
+						//Send signaling message
+						.then(() => {
+							sendMessage({"sdp": pc.localDescription})
+						})
+					})
 
 				room.on("data", (message, client) => {
 					
-					console.log(message)
-
 					if (!client || client.id === drone.clientId) {
-     					return;
-   					}
+						return;
+					}
+
+					console.dir(message)
 
 					//SDP offer received
 					if (message.sdp) {
 						pc.setRemoteDescription(message.sdp)
 						.then(() => {
+							console.log("Answering SDP offer")
 							//When an offer is received, answer it
 							if (pc.remoteDescription.type == "offer") {
 								pc.createAnswer()
-								.then(pc.setLocalDescription)
+								.then(offer => {return pc.setLocalDescription(offer)})
 								.then(() => {
 									sendMessage({'sdp': pc.localDescription})
 								})
@@ -83,9 +104,21 @@
 					//Icecandidate received
 					if (message.candidate) {
 						// Add the new ICE candidate to our connections remote description
+						//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/addIceCandidate
 						pc.addIceCandidate(
-							new RTCIceCandidate(message.candidate), onSuccess, onError
-						);
+							//Candidate
+							new RTCIceCandidate(message.candidate),
+							
+							//On success
+							() => {
+								console.log("Added ICE candidate succesfully")
+							},
+							
+							//On error
+							err => {
+								console.error("Error adding ICE candidate:", err)
+							}
+						)
 					}
 
 				})
@@ -99,7 +132,10 @@
 				});
 			}
 
-			function startWebRTC() {
+			function startWebRTC(offering) {
+
+				console.log("Starting WebRTC")
+
 				//WebRTC config
 				const configuration = {
 					iceServers: [{
@@ -108,20 +144,41 @@
 				}
 
 				//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection
-				var pc = new RTCPeerConnection(configuration);
+				pc = new RTCPeerConnection(configuration);
 				
 				//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onicecandidate
 				pc.addEventListener("icecandidate", event => {
 					if (event.candidate) {
+						console.log("Sending ICE candidate")
 						sendMessage({"candidate": event.candidate})
 					}
 				})
+				
+				pc.addEventListener("connectionstatechange", event => {
+					console.log("New state:", pc.connectionState)
+					
+					//Go gather stream
+					if (pc.connectionState == "connected" && !hosting) {
+						const streams = pc.getRemoteStreams()
+						console.log("Gathering streams:", streams)
+						video.srcObject = streams[0]
+					}
+				})
 
-				//Offer SDP when hosting
-				if (hosting) {
+				//If not hosting and stream is received, display it
+				if (!hosting) {
+					pc.addEventListener("addstream", event => {
+						video.srcObject = event.stream;
+					})
+				}
+
+				//Offer SDP when second person connected
+				/*if (offering) {
 					//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/negotiationneeded_event
 					//https://developer.mozilla.org/en-US/docs/Glossary/SDP
 					pc.addEventListener("negotiationneeded", event => {
+						console.log("Creating offer")
+
 						pc.createOffer()
 						.then(offer => {return pc.setLocalDescription(offer)})
 						
@@ -130,14 +187,13 @@
 							sendMessage({"sdp": pc.localDescription})
 						})
 					})
-				}
+				}*/
 
 				//Add stream when hosting
 				if (hosting) {
 					if (!navigator.mediaDevices.getDisplayMedia) {
 						Alert("Not supported");
 					} else {
-						video.setAttribute('autoplay', true);
 						
 						//https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia
 						navigator.mediaDevices.getDisplayMedia().then(mediaStream => {
