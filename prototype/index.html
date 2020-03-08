@@ -1,0 +1,165 @@
+<!-- SCALEDRONE PROTOTYPE-->
+<!--
+	This protype uses scaledrone for signaling.
+	Because scaledrone works comepletely p2p,
+	this protype works comepletely serverless.
+-->
+
+<html>
+	<head>
+		<!-- To keep this p2p we need to signal via for instance scaledrone or bugout (which hitchhikes webtorrents trackers) -->
+		<script type='text/javascript' src='https://cdn.scaledrone.com/scaledrone.min.js'></script>
+	</head>
+	<body style="text-align: center;">
+		<h1>Bunny prototype</h1>
+
+		<!--https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video-->
+		<video id="video" width="800" height="600`"></video>
+		
+		<script>
+			//Check if we are host or client
+			if (location.hash == "") {
+				var hosting = true;
+				
+				//Set hash for sharing
+				var roomHash = Math.random().toString(36).substring(7);
+				location.hash = roomHash;
+			} else {
+				var hosting = false;
+				var roomHash = location.hash;
+			}
+
+			const roomName = 'observable-' + roomHash;
+			const drone = new ScaleDrone("2rr1mps4zK4JB32N");
+			const videoTag = document.getElementById("video");
+
+			var room;
+			var pc;
+
+			drone.on("open", err => {
+				if (err) {
+					console.error(err);
+					return Alert("Error occured")
+				}
+
+				room = drone.subscribe(roomName);
+				room.on("open", err => {
+					if (err) {
+						console.error(err);
+						return Alert("Error occured")
+					}
+				
+					startWebRTC()
+					
+				})
+
+				room.on("data", (message, client) => {
+					
+					console.log(message)
+
+					if (!client || client.id === drone.clientId) {
+     					return;
+   					}
+
+					//SDP offer received
+					if (message.sdp) {
+						pc.setRemoteDescription(message.sdp)
+						.then(() => {
+							//When an offer is received, answer it
+							if (pc.remoteDescription.type == "offer") {
+								pc.createAnswer()
+								.then(pc.setLocalDescription)
+								.then(() => {
+									sendMessage({'sdp': pc.localDescription})
+								})
+								.catch(err => {
+									console.log(err);
+									alert("An error occured");
+								});
+							}
+						})
+					}
+
+					//Icecandidate received
+					if (message.candidate) {
+						// Add the new ICE candidate to our connections remote description
+						pc.addIceCandidate(
+							new RTCIceCandidate(message.candidate), onSuccess, onError
+						);
+					}
+
+				})
+
+			})
+
+			function sendMessage(message) {
+				drone.publish({
+					room: roomName,
+					message
+				});
+			}
+
+			function startWebRTC() {
+				//WebRTC config
+				const configuration = {
+					iceServers: [{
+						urls: "stun:stun.l.google.com:19302"
+					}]
+				}
+
+				//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection
+				var pc = new RTCPeerConnection(configuration);
+				
+				//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/onicecandidate
+				pc.addEventListener("icecandidate", event => {
+					if (event.candidate) {
+						sendMessage({"candidate": event.candidate})
+					}
+				})
+
+				//Offer SDP when hosting
+				if (hosting) {
+					//https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/negotiationneeded_event
+					//https://developer.mozilla.org/en-US/docs/Glossary/SDP
+					pc.addEventListener("negotiationneeded", event => {
+						pc.createOffer()
+						.then(offer => {return pc.setLocalDescription(offer)})
+						
+						//Send signaling message
+						.then(() => {
+							sendMessage({"sdp": pc.localDescription})
+						})
+					})
+				}
+
+				//Add stream when hosting
+				if (hosting) {
+					if (!navigator.mediaDevices.getDisplayMedia) {
+						Alert("Not supported");
+					} else {
+						video.setAttribute('autoplay', true);
+						
+						//https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia
+						navigator.mediaDevices.getDisplayMedia().then(mediaStream => {
+							
+							//https://developer.mozilla.org/en-US/docs/Web/API/MediaStream
+							console.log(mediaStream);
+							
+							//https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/srcObject
+							video.srcObject = mediaStream;
+
+							pc.addStream(mediaStream);
+
+						}).catch(err => {
+							console.error(err);
+							alert("Error retrieving mediastream")
+						})
+					}
+				}
+
+			}
+			
+		</script>
+	</body>
+</html>
+<!--https://www.scaledrone.com/blog/webrtc-tutorial-simple-video-chat/-->
