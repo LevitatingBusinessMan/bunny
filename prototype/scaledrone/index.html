@@ -1,9 +1,18 @@
-<!-- SCALEDRONE PROTOTYPE-->
+<!--SCALEDRONE PROTOTYPE-->
 <!--
 	This protype uses scaledrone for signaling.
 	Because scaledrone works comepletely p2p,
 	this protype works comepletely serverless.
 -->
+
+<!--WARNING-->
+<!--
+	This prototype is the first of its kind.
+	It's buggy, some ICE candidates fail because they are added before the SDP
+	And it only supports 1 client per host
+-->
+
+<!--VERSION v0.0.1-->
 
 <html>
 	<head>
@@ -79,6 +88,7 @@
 						return;
 					}
 
+					console.log("Message received:")
 					console.dir(message)
 
 					//SDP offer received
