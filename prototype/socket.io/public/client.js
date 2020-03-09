@@ -25,12 +25,21 @@ if (!hosting) {
 	})
 
 	pc.onicecandidate = event => {
+		if (!event.candidate)
+			return
 		console.log("Sending ICE candidate to host")
 		socket.emit("icecandidate", host, event.candidate)
 	}
 
 	//Add ice candidate from host
 	socket.on("icecandidate", (id, candidate) => {
+		
+		//Only trust candidates from the host
+		if (id != host)
+			return
+		
+		console.log("Received ICE candidate from host")
+
 		pc.addIceCandidate(
 			//Candidate
 			new RTCIceCandidate(candidate),

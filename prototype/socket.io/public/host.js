@@ -17,7 +17,7 @@ if (hosting) {
 		function gotStream (mediaStream_) {
 			mediaStream = mediaStream_
 			video.srcObject = mediaStream
-			
+
 			if (!mediaStream.getAudioTracks().length)
 				console.warn("No audio track found")
 		}
@@ -49,6 +49,8 @@ if (hosting) {
 
 		//Send ICE candidate to client
 		pc.onicecandidate = event => {
+			if (!event.candidate)
+				return
 			console.log("Sending ICE candidate to", id)
 			socket.emit("icecandidate", id, event.candidate)
 		}
@@ -70,6 +72,8 @@ if (hosting) {
 	//Add ice candidate from client
 	socket.on("icecandidate", (id, candidate) => {
 		const pc = peerConnections[id]
+
+		console.log("Received ICE candidate from ", id)
 		pc.addIceCandidate(
 			//Candidate
 			new RTCIceCandidate(candidate),
