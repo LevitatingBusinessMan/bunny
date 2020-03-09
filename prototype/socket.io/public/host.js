@@ -9,9 +9,9 @@ if (hosting) {
 
 		//Receive mediastream
 		if (navigator.mediaDevices.getDisplayMedia)
-			navigator.mediaDevices.getDisplayMedia({audio:true, video:true}).then(gotStream)
+			navigator.mediaDevices.getDisplayMedia(displayMediaConfig).then(gotStream)
 		else {
-			navigator.getDisplayMedia({audio:true, video:true}).then(gotStream)
+			navigator.getDisplayMedia(displayMediaConfig).then(gotStream)
 		}
 
 		function gotStream (mediaStream_) {

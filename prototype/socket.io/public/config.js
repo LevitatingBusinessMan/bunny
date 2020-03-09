@@ -5,3 +5,14 @@ const peerConnectionConfig = {
 }
 
 const signalServer = "http://localhost:4343"
+
+const displayMediaConfig = {
+	audio: {
+		autoGainControl: false,
+		echoCancellation: false,
+		noiseSuppression: false,
+		sampleSize: 16,
+		sampleRate: 8000
+	},
+	video:true
+}
