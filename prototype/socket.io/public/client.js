@@ -6,6 +6,9 @@ if (!hosting) {
 	//Single connection to HOST
 	var pc = new RTCPeerConnection(peerConnectionConfig)
 
+	//Data channel for chat
+	var chat
+
 	//Receive SDP offer, create RTCPeerConnection and answer
 	socket.on("sdp-offer", (id, sdp) => {
 		console.log("Received SDP offer from host")
@@ -67,6 +70,36 @@ if (!hosting) {
 			video.srcObject = mediaStream
 			video.play()
 		}
+	}
+
+	pc.ondatachannel = event => {
+		console.log("Received DataChannel")
+		chat = event.channel
+		
+		//Chat events
+		chat.onopen = () => addChatMessage("Opened datachannel", true)
+		
+		/* The messageData send from client -> host is the raw message
+		the messageData send form host -> client is JSON data (to include the og author) */
+		
+		chat.onmessage = messageEvent => {
+			msgData = JSON.parse(messageEvent.data)
+			addChatMessage(`${msgData.author.substr(0,4)}: ${msgData.msg}`)
+		}
+		chat.onerror = console.err
+	}
+
+	//Send chatmessage
+	const chatInput = document.getElementById("chat-input")
+	function sendChatMessage() {
+		const msg = chatInput.value;
+		
+		//Add to dom
+		addChatMessage("Me: " + msg)
+		
+		chat.send(msg)
+		chatInput.value = ""
+		console.log("Sending chat message: ", msg)
 	}
 
 }

@@ -25,7 +25,7 @@ if (hosting) {
 	}
 
 	//Array of connections to clients
-	const peerConnections = {}
+	var peerConnections = {}, chatDataChannels = {}
 
 	//New member joins
 	socket.on("member_join", (id, count) => {
@@ -33,6 +33,10 @@ if (hosting) {
 		//Create new peer connection
 		const pc = new RTCPeerConnection(peerConnectionConfig);
 		pc.addStream(mediaStream)
+
+		//Open datachannel for chat messages
+		const chat = pc.createDataChannel("chat")
+		chatDataChannels[id] = chat
 
 		//Save connection
 		peerConnections[id] = pc
@@ -54,6 +58,17 @@ if (hosting) {
 			console.log("Sending ICE candidate to", id)
 			socket.emit("icecandidate", id, event.candidate)
 		}
+		
+		//Handle chat events
+		chat.onopen = () => addChatMessage("Opened datachannel with " + id, true)
+		chat.onmessage = messageEvent => {
+			//Add to DOM
+			addChatMessage(`${id.substr(0,4)}: ${messageEvent.data}`)
+
+			//Send to all other clients
+			forwardChetMesage(id, messageEvent.data)
+		}
+		chat.onerror = console.err
 
 	})
 
@@ -89,5 +104,40 @@ if (hosting) {
 			}
 		)
 	})
+
+	/* The messageData send from client -> host is the raw message
+	the messageData send form host -> client is JSON data (to include the og author) */
+
+	//Send chatmessage
+	const chatInput = document.getElementById("chat-input")
+	function sendChatMessage() {
+
+		//Add to dom
+		addChatMessage("Me: " + chatInput.value)
+
+		const msgData = {
+			author: "Host",
+			msg: chatInput.value
+		}
+
+		for (id in chatDataChannels) {
+			chatDataChannels[id].send(JSON.stringify(msgData))
+		}
+		chatInput.value = ""
+
+	}
+
+	function forwardChetMesage(id, msg) {
+		const msgData = {
+			author: id,
+			msg : msg
+		}
+
+		for (id_ in chatDataChannels) {
+			if (id == id_)
+				continue
+			chatDataChannels[id_].send(JSON.stringify(msgData))
+		}
+	}
 
 }

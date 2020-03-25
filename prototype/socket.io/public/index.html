@@ -8,15 +8,27 @@
 		<h1>Bunny prototype</h1>
 		
 		<video id="video" width="800" height="600`" autoplay="true"></video>
-		
-		<script>
-			//WebRTC config
-			const configuration = {
-				iceServers: [{
-					urls: "stun:stun.l.google.com:19302"
-				}]
-			}
-		</script>
+
+		<!-- CHAT -->
+		<div style="width: 300px;height: 80%;position: absolute;right:20px;top:50px;outline: 2px solid red;padding: 10px; ">
+			<ul id="chat" style="padding: 10px; text-align: left;"></ul>
+			<div style="position: absolute;bottom: 5px;">
+				<input id="chat-input"/><button onclick="sendChatMessage();">Send</button>
+			</div>	
+			<script>
+				const chatUL = document.getElementById("chat")
+				function addChatMessage(msg, event) {
+					const node = document.createElement("li")
+					node.innerHTML = msg
+					if (event)
+						node.style = "list-style-type: none; text-align: center; font-style: italic; color: #444; margin: 8px 0px 8px 0px;"
+					else node.style = "list-style-type: none;"
+					chatUL.appendChild(node)
+				}
+			</script>
+		</div>
+		<!-- /CHAT -->
+
 		<script src="host.js"></script>
 		<script src="client.js"></script>
 	</body>

@@ -1,3 +1,8 @@
+/* In the future, we can move further away from the sig_serv by only using it to initally talk to a single host.
+The host can then use webRTC datachannels to broadcast to its peers.
+This way no socket.io rooms are required,
+and socket.io connections can immediately be terminated after a peerconnection has been opened. */
+
 const io = require("socket.io")()
 const port = 4343
 
