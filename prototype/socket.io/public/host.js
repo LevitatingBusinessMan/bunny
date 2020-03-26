@@ -1,5 +1,12 @@
 if (hosting) {
 
+	//Created room
+	socket.on("created", hash => {
+		hash = hash
+		console.log("Hash:", hash)
+		location.hash = hash
+	})
+
 	var mediaStream
 
 	// Available as a member of Navigator instead of MediaDevices in Chrome 70 and 71.
@@ -25,18 +32,18 @@ if (hosting) {
 	}
 
 	//Array of connections to clients
-	var peerConnections = {}, chatDataChannels = {}
+	var peerConnections = {}, dataChannels = {}, members = 0
 
 	//New member joins
-	socket.on("member_join", (id, count) => {
+	socket.on("client", (id) => {
 		
 		//Create new peer connection
 		const pc = new RTCPeerConnection(peerConnectionConfig);
 		pc.addStream(mediaStream)
 
-		//Open datachannel for chat messages
-		const chat = pc.createDataChannel("chat")
-		chatDataChannels[id] = chat
+		//Open datachannel
+		const dc = pc.createDataChannel("data")
+		dataChannels[id] = dc
 
 		//Save connection
 		peerConnections[id] = pc
@@ -58,17 +65,69 @@ if (hosting) {
 			console.log("Sending ICE candidate to", id)
 			socket.emit("icecandidate", id, event.candidate)
 		}
-		
-		//Handle chat events
-		chat.onopen = () => addChatMessage("Opened datachannel with " + id, true)
-		chat.onmessage = messageEvent => {
-			//Add to DOM
-			addChatMessage(`${id.substr(0,4)}: ${messageEvent.data}`)
 
-			//Send to all other clients
-			forwardChetMesage(id, messageEvent.data)
+		//Log connectionstatechange
+		pc.onconnectionstatechange =  event => {
+			console.log(`New connection state ${id}:`, pc.connectionState)
+
+			switch(pc.connectionState) {
+				case "connected": {
+					members++
+
+					const msg = {
+						type: "member_join",
+						id,
+						member_count: members
+					}
+	
+					broadcast(msg)
+
+					console.group("Member joined")
+					console.log("ID:", id)
+					console.log("Total members:", members)
+					console.groupEnd()
+
+					break
+				}
+				case "disconnected":
+				case "closed": {
+					members--
+					delete peerConnections[id]
+					delete dataChannels[id]
+
+					const msg = {
+						type: "member_leave",
+						id,
+						member_count: members
+					}
+	
+					broadcast(msg)
+
+					//Logging
+					console.group("Member left")
+					console.log("ID:", id)
+					console.log("Total members:", members)
+					console.groupEnd()
+
+					break
+				}
+			}
 		}
-		chat.onerror = console.err
+
+		//DataChannel handling
+		dc.onopen = () => {
+			console.log("Opened datachannel with", id)
+		}
+
+		//If the datachannel closes, close peerconnection
+		dc.onclose = () => {
+			console.log("DataChannel with", id, "closed")
+
+			if (pc.connectionState == "connected")
+				pc.close()
+		}
+
+		dc.onmessage = msg => receiveMessage(id, msg)
 
 	})
 
@@ -105,39 +164,63 @@ if (hosting) {
 		)
 	})
 
-	/* The messageData send from client -> host is the raw message
-	the messageData send form host -> client is JSON data (to include the og author) */
+	/* Broadcast message to all peers */
+	function broadcast(msg, exclude) {
+
+		//If we didn't define an author before, we are the author
+		if (!msg.author)
+			msg.author = "host"
+
+		for (id in dataChannels) {
+			const dc = dataChannels[id]
+			if (dc.readyState == "open" && id != exclude)
+				dc.send(JSON.stringify(msg))
+		}
+	}
+
+	function receiveMessage(author, messageEvent) {
+		const msg = JSON.parse(messageEvent.data)
+
+		//Define the author of the message
+		msg.author = author
+
+		console.group("Message received from", author)
+		console.log(msg)
+		console.groupEnd()
+
+		//Broadcast to all other members
+		broadcast(msg, author)
+
+		switch (msg.type) {
+			case "chat_message": {
+				//Add to dom
+				addChatMessage(`${msg.author.substr(0,5)}: ${msg.message}`)
+				break
+			}
+		}
+
+	}
 
 	//Send chatmessage
 	const chatInput = document.getElementById("chat-input")
 	function sendChatMessage() {
 
+		const message = chatInput.value
+
+		const msg = {
+			type: "chat_message",
+			message
+		}
+
+		broadcast(msg)
+
 		//Add to dom
-		addChatMessage("Me: " + chatInput.value)
+		addChatMessage("Me: " + message)
 
-		const msgData = {
-			author: "Host",
-			msg: chatInput.value
-		}
+		console.log("Sending chat message: ", message)
 
-		for (id in chatDataChannels) {
-			chatDataChannels[id].send(JSON.stringify(msgData))
-		}
 		chatInput.value = ""
 
-	}
-
-	function forwardChetMesage(id, msg) {
-		const msgData = {
-			author: id,
-			msg : msg
-		}
-
-		for (id_ in chatDataChannels) {
-			if (id == id_)
-				continue
-			chatDataChannels[id_].send(JSON.stringify(msgData))
-		}
 	}
 
 }
